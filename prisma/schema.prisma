@@ -1,0 +1,356 @@
+// Navaja Barber Studio - Esquema de datos
+// PostgreSQL + Prisma ORM
+// Zona horaria de negocio: America/Guatemala (UTC-6)
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  ADMIN
+  BARBER
+  CUSTOMER
+}
+
+enum AppointmentStatus {
+  PENDING_PAYMENT
+  CONFIRMED
+  COMPLETED
+  CANCELLED
+  NO_SHOW
+}
+
+enum PaymentStatus {
+  PENDING
+  PROCESSING
+  PAID
+  FAILED
+  REFUNDED
+  CANCELLED
+}
+
+enum PaymentType {
+  FULL
+  DEPOSIT
+}
+
+enum PaymentProvider {
+  MOCK
+  NEONET
+}
+
+enum DepositType {
+  NONE
+  PERCENT
+  FIXED
+}
+
+enum AvailabilityType {
+  VACATION
+  DAY_OFF
+  BLOCK
+}
+
+enum NotificationChannel {
+  EMAIL
+  WHATSAPP
+}
+
+enum NotificationStatus {
+  QUEUED
+  SENT
+  FAILED
+  SKIPPED
+}
+
+enum NotificationType {
+  BOOKING_CONFIRMED
+  PAYMENT_CONFIRMED
+  PAYMENT_FAILED
+  REMINDER
+  CANCELLED
+  RESCHEDULED
+}
+
+model User {
+  id            String    @id @default(cuid())
+  name          String
+  email         String    @unique
+  emailVerified DateTime? @db.Timestamptz(3)
+  image         String?
+  passwordHash  String
+  phone         String?
+  role          Role      @default(CUSTOMER)
+  active        Boolean   @default(true)
+  createdAt     DateTime  @default(now()) @db.Timestamptz(3)
+  updatedAt     DateTime  @updatedAt @db.Timestamptz(3)
+
+  barberProfile       Barber?
+  customerProfile     Customer?
+  createdAppointments Appointment[] @relation("AppointmentCreatedBy")
+  availabilityBlocks  Availability[] @relation("AvailabilityCreatedBy")
+  auditLogs           AuditLog[]
+
+  @@index([role, active])
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  userId    String?  @unique
+  name      String
+  email     String   @unique
+  phone     String
+  notes     String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt DateTime @updatedAt @db.Timestamptz(3)
+
+  user           User?          @relation(fields: [userId], references: [id], onDelete: SetNull)
+  appointments   Appointment[]
+  notifications  Notification[]
+
+  @@index([phone])
+  @@index([name])
+}
+
+model Barber {
+  id              String   @id @default(cuid())
+  userId          String   @unique
+  slug            String   @unique
+  title           String?
+  bio             String?
+  imageUrl        String?
+  active          Boolean  @default(true)
+  acceptsBookings Boolean  @default(true)
+  displayOrder    Int      @default(0)
+  createdAt       DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime @updatedAt @db.Timestamptz(3)
+
+  user         User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  schedules    BarberSchedule[]
+  availability Availability[]
+  appointments Appointment[]
+
+  @@index([active, displayOrder])
+}
+
+model Service {
+  id           String   @id @default(cuid())
+  slug         String   @unique
+  name         String
+  description  String?
+  priceCents   Int
+  durationMin  Int      @default(30)
+  bufferMin    Int      @default(10)
+  category     String   @default("General")
+  imageUrl     String?
+  active       Boolean  @default(true)
+  displayOrder Int      @default(0)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  appointments Appointment[]
+
+  @@index([active, displayOrder])
+}
+
+model Schedule {
+  id                String   @id @default(cuid())
+  weekday           Int      @unique
+  openMinute        Int
+  closeMinute       Int
+  breakStartMinute  Int?
+  breakEndMinute    Int?
+  active            Boolean  @default(true)
+  createdAt         DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime @updatedAt @db.Timestamptz(3)
+
+  @@index([active])
+}
+
+model BarberSchedule {
+  id           String   @id @default(cuid())
+  barberId     String
+  weekday      Int
+  startMinute  Int
+  endMinute    Int
+  active       Boolean  @default(true)
+  createdAt    DateTime @default(now()) @db.Timestamptz(3)
+  updatedAt    DateTime @updatedAt @db.Timestamptz(3)
+
+  barber Barber @relation(fields: [barberId], references: [id], onDelete: Cascade)
+
+  @@unique([barberId, weekday, startMinute])
+  @@index([barberId, weekday])
+}
+
+model Availability {
+  id          String           @id @default(cuid())
+  barberId    String?
+  startAt     DateTime         @db.Timestamptz(3)
+  endAt       DateTime         @db.Timestamptz(3)
+  allDay      Boolean          @default(false)
+  type        AvailabilityType @default(BLOCK)
+  reason      String?
+  createdById String?
+  createdAt   DateTime         @default(now()) @db.Timestamptz(3)
+
+  barber    Barber? @relation(fields: [barberId], references: [id], onDelete: Cascade)
+  createdBy User?   @relation("AvailabilityCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@index([barberId, startAt, endAt])
+  @@index([startAt, endAt])
+}
+
+model Appointment {
+  id              String            @id @default(cuid())
+  code            String            @unique
+  customerId      String
+  barberId        String
+  serviceId       String
+  startAt         DateTime          @db.Timestamptz(3)
+  endAt           DateTime          @db.Timestamptz(3)
+  status          AppointmentStatus @default(PENDING_PAYMENT)
+  totalCents      Int
+  depositCents    Int               @default(0)
+  amountDueCents  Int               @default(0)
+  currency        String            @default("GTQ")
+  notes           String?
+  internalNotes   String?
+  createdById     String?
+  cancelledAt     DateTime?         @db.Timestamptz(3)
+  cancelledReason String?
+  completedAt     DateTime?         @db.Timestamptz(3)
+  reminderSentAt  DateTime?         @db.Timestamptz(3)
+  createdAt       DateTime          @default(now()) @db.Timestamptz(3)
+  updatedAt       DateTime          @updatedAt @db.Timestamptz(3)
+
+  customer      Customer       @relation(fields: [customerId], references: [id], onDelete: Restrict)
+  barber        Barber         @relation(fields: [barberId], references: [id], onDelete: Restrict)
+  service       Service        @relation(fields: [serviceId], references: [id], onDelete: Restrict)
+  createdBy     User?          @relation("AppointmentCreatedBy", fields: [createdById], references: [id], onDelete: SetNull)
+  payments      Payment[]
+  notifications Notification[]
+
+  @@unique([barberId, startAt])
+  @@index([barberId, startAt, endAt])
+  @@index([status, startAt])
+  @@index([customerId, startAt])
+  @@index([startAt])
+}
+
+model Payment {
+  id                String          @id @default(cuid())
+  appointmentId     String
+  provider          PaymentProvider @default(MOCK)
+  providerRef       String?
+  externalId        String          @unique
+  idempotencyKey    String          @unique
+  type              PaymentType     @default(FULL)
+  status            PaymentStatus   @default(PENDING)
+  amountCents       Int
+  currency          String          @default("GTQ")
+  cardBrand         String?
+  cardLast4         String?
+  authorizationCode String?
+  receiptUrl        String?
+  checkoutUrl       String?
+  failureReason     String?
+  rawStatus         String?
+  paidAt            DateTime?       @db.Timestamptz(3)
+  createdAt         DateTime        @default(now()) @db.Timestamptz(3)
+  updatedAt         DateTime        @updatedAt @db.Timestamptz(3)
+
+  appointment Appointment    @relation(fields: [appointmentId], references: [id], onDelete: Cascade)
+  events      PaymentEvent[]
+
+  @@index([appointmentId, status])
+  @@index([status, createdAt])
+}
+
+model PaymentEvent {
+  id          String   @id @default(cuid())
+  provider    String
+  eventId     String   @unique
+  paymentId   String?
+  payload     Json
+  receivedAt  DateTime @default(now()) @db.Timestamptz(3)
+  processedAt DateTime? @db.Timestamptz(3)
+
+  payment Payment? @relation(fields: [paymentId], references: [id], onDelete: SetNull)
+
+  @@index([provider, receivedAt])
+}
+
+model Notification {
+  id            String              @id @default(cuid())
+  appointmentId String?
+  customerId    String?
+  channel       NotificationChannel @default(EMAIL)
+  type          NotificationType
+  recipient     String
+  subject       String?
+  body          String
+  status        NotificationStatus  @default(QUEUED)
+  providerRef   String?
+  error         String?
+  scheduledFor  DateTime?           @db.Timestamptz(3)
+  sentAt        DateTime?           @db.Timestamptz(3)
+  createdAt     DateTime            @default(now()) @db.Timestamptz(3)
+
+  appointment Appointment? @relation(fields: [appointmentId], references: [id], onDelete: SetNull)
+  customer    Customer?    @relation(fields: [customerId], references: [id], onDelete: SetNull)
+
+  @@index([status, scheduledFor])
+  @@index([appointmentId])
+  @@index([createdAt])
+}
+
+model BusinessSettings {
+  id                String          @id @default("default")
+  businessName      String          @default("Navaja Barber Studio")
+  tagline           String          @default("Cortes de autor en el corazón de Guatemala")
+  description       String?
+  logoUrl           String?
+  phone             String          @default("+502 5555 1234")
+  whatsapp          String          @default("50255551234")
+  email             String          @default("hola@navajabarber.gt")
+  address           String          @default("Zona 14, Ciudad de Guatemala")
+  mapsUrl           String?
+  mapsEmbedUrl      String?
+  instagram         String?
+  facebook          String?
+  timezone          String          @default("America/Guatemala")
+  currency          String          @default("GTQ")
+  requirePayment    Boolean         @default(true)
+  depositType       DepositType     @default(PERCENT)
+  depositValue      Int             @default(30)
+  minAdvanceMinutes Int             @default(120)
+  maxAdvanceDays    Int             @default(45)
+  cancellationHours Int             @default(12)
+  slotIntervalMin   Int             @default(15)
+  paymentProvider   PaymentProvider @default(MOCK)
+  updatedAt         DateTime        @updatedAt @db.Timestamptz(3)
+}
+
+model AuditLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String
+  entityId  String?
+  metadata  Json?
+  ip        String?
+  userAgent String?
+  createdAt DateTime @default(now()) @db.Timestamptz(3)
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([createdAt])
+  @@index([entity, entityId])
+  @@index([userId, createdAt])
+}
