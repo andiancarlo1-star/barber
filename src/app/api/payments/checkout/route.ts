@@ -3,12 +3,13 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { createCheckoutForAppointment, PaymentConfigError } from "@/lib/payments";
 import { getSettings } from "@/lib/settings";
+import { setRlsContext } from "@/lib/rls";
 import { clientIp, isSameOrigin } from "@/lib/utils";
 import { rateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
-const schema = z.object({ code: z.string().min(4).max(20) });
+const schema = z.object({ code: z.string().min(4).max(64) });
 
 export async function POST(request: Request) {
   if (!isSameOrigin(request)) {
@@ -17,6 +18,8 @@ export async function POST(request: Request) {
 
   const limit = rateLimit(`checkout:${clientIp(request)}`, 20, 10 * 60_000);
   if (!limit.ok) return NextResponse.json({ error: "Demasiados intentos" }, { status: 429 });
+
+  setRlsContext({ role: "SYSTEM" });
 
   const body = await request.json().catch(() => null);
   const parsed = schema.safeParse(body);

@@ -2,11 +2,13 @@ import { NextResponse } from "next/server";
 import bcrypt from "bcryptjs";
 import { prisma } from "@/lib/prisma";
 import { registerSchema } from "@/lib/validation";
+import { setRlsContext } from "@/lib/rls";
 import { clientIp } from "@/lib/utils";
 import { rateLimit } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
 
 export async function POST(request: Request) {
+  setRlsContext({ role: "SYSTEM" });
   const ip = clientIp(request);
   const limit = rateLimit(`register:${ip}`, 5, 10 * 60_000);
   if (!limit.ok) {

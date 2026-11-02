@@ -122,18 +122,10 @@ export const neonetProvider: PaymentProviderAdapter = {
       request.headers.get("x-webhook-signature") ||
       "";
 
-    if (header) {
-      const expected = createHmac("sha256", secret).update(request.rawBody).digest("hex");
-      const provided = header.replace(/^sha256=/, "");
-      return safeEqual(provided, expected);
-    }
-
-    try {
-      const token = new URL(request.url).searchParams.get("token");
-      return token ? safeEqual(token, secret) : false;
-    } catch {
-      return false;
-    }
+    if (!header) return false;
+    const expected = createHmac("sha256", secret).update(request.rawBody).digest("hex");
+    const provided = header.replace(/^sha256=/, "");
+    return safeEqual(provided, expected);
   },
   parseWebhook(request: WebhookRequest): ParsedWebhook | null {
     const data = parseBody(request.rawBody);

@@ -1,9 +1,13 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import { ArrowLeft, CheckCircle2 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
+import { setRlsContext } from "@/lib/rls";
+import { clientIp } from "@/lib/utils";
+import { rateLimit } from "@/lib/rate-limit";
 import { formatDateLong, formatDateTime, formatMoney, formatTime } from "@/lib/dates";
 import { BrandMark } from "@/components/brand";
 import { PrintButton } from "@/components/payments/print-button";
@@ -18,6 +22,10 @@ export const metadata: Metadata = {
 
 export default async function ReceiptPage({ params }: { params: Promise<{ code: string }> }) {
   const { code } = await params;
+  const requestHeaders = await headers();
+  const limit = rateLimit(`receipt-view:${clientIp(requestHeaders)}`, 30, 60_000);
+  if (!limit.ok) notFound();
+  setRlsContext({ role: "SYSTEM" });
   const [appointment, settings] = await Promise.all([
     prisma.appointment.findUnique({
       where: { code },

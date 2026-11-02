@@ -3,13 +3,14 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { cancelAppointment, BookingError } from "@/lib/appointments";
 import { getSessionUser } from "@/lib/auth-helpers";
+import { setRlsContext } from "@/lib/rls";
 import { clientIp, isSameOrigin } from "@/lib/utils";
 import { rateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 const schema = z.object({
-  code: z.string().min(4).max(20),
+  code: z.string().min(4).max(64),
   reason: z.string().trim().max(300).optional(),
 });
 
@@ -20,6 +21,8 @@ export async function POST(request: Request) {
 
   const limit = rateLimit(`cancel:${clientIp(request)}`, 10, 10 * 60_000);
   if (!limit.ok) return NextResponse.json({ error: "Demasiados intentos" }, { status: 429 });
+
+  setRlsContext({ role: "SYSTEM" });
 
   const body = await request.json().catch(() => null);
   const parsed = schema.safeParse(body);
@@ -34,6 +37,7 @@ export async function POST(request: Request) {
   }
 
   const user = await getSessionUser();
+  setRlsContext({ role: "SYSTEM" });
   const isAdmin = user?.role === "ADMIN";
   const isOwner =
     user?.role === "CUSTOMER" &&

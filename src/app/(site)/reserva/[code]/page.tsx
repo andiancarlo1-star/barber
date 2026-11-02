@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { headers } from "next/headers";
 import {
   AlertTriangle,
   CalendarDays,
@@ -17,8 +18,10 @@ import {
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
 import { getSessionUser } from "@/lib/auth-helpers";
+import { setRlsContext } from "@/lib/rls";
 import { formatDateLong, formatDateTime, formatMoney, formatTime } from "@/lib/dates";
-import { whatsappLink } from "@/lib/utils";
+import { clientIp, whatsappLink } from "@/lib/utils";
+import { rateLimit } from "@/lib/rate-limit";
 import { Alert, StatusBadge, buttonClasses } from "@/components/ui";
 import {
   CancelAppointmentButton,
@@ -42,8 +45,13 @@ export default async function ReservationPage({
 }) {
   const { code } = await params;
   const query = await searchParams;
+  const requestHeaders = await headers();
+  const limit = rateLimit(`reservation-view:${clientIp(requestHeaders)}`, 60, 60_000);
+  if (!limit.ok) notFound();
+  const user = await getSessionUser();
+  setRlsContext({ role: "SYSTEM" });
 
-  const [appointment, settings, user] = await Promise.all([
+  const [appointment, settings] = await Promise.all([
     prisma.appointment.findUnique({
       where: { code },
       include: {
@@ -54,7 +62,6 @@ export default async function ReservationPage({
       },
     }),
     getSettings(),
-    getSessionUser(),
   ]);
 
   if (!appointment) notFound();

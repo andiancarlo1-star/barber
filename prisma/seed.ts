@@ -2,7 +2,9 @@ import { PrismaClient, type AppointmentStatus } from "@prisma/client";
 import bcrypt from "bcryptjs";
 import { addDaysToKey, todayKey, zonedToUtc } from "../src/lib/dates";
 
-const prisma = new PrismaClient();
+const prisma = new PrismaClient({
+  datasourceUrl: process.env.MIGRATE_DATABASE_URL ?? process.env.DATABASE_URL,
+});
 
 const SERVICES = [
   {
@@ -142,6 +144,12 @@ const CUSTOMERS = [
 ];
 
 async function main() {
+  if (process.env.NODE_ENV === "production" || process.env.ALLOW_DEMO_SEED !== "true") {
+    throw new Error(
+      "Seed demo bloqueado. Solo úsalo en desarrollo con ALLOW_DEMO_SEED=true; elimina y reemplaza los datos de la base.",
+    );
+  }
+
   console.log("Limpiando datos...");
   await prisma.paymentEvent.deleteMany();
   await prisma.notification.deleteMany();

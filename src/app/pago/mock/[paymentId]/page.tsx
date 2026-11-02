@@ -1,6 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 import { CalendarDays, Clock, Scissors, UserRound } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { setRlsContext } from "@/lib/rls";
 import { formatDateLong, formatMoney, formatTime } from "@/lib/dates";
 import { MockPaymentPanel } from "@/components/payments/mock-payment-panel";
 
@@ -12,6 +13,7 @@ export default async function MockPaymentPage({
   params: Promise<{ paymentId: string }>;
 }) {
   const { paymentId } = await params;
+  setRlsContext({ role: "SYSTEM" });
   const payment = await prisma.payment.findUnique({
     where: { id: paymentId },
     include: {

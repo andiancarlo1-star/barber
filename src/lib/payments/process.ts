@@ -65,20 +65,20 @@ export async function processPaymentUpdate(
   }
 
   if (parsed.status === "PENDING") {
-    await prisma.$transaction([
-      prisma.payment.update({
+    await prisma.$transaction(async (tx) => {
+      await tx.payment.update({
         where: { id: payment.id },
         data: {
           status: "PROCESSING",
           rawStatus: parsed.rawStatus,
           providerRef: parsed.providerRef ?? payment.providerRef,
         },
-      }),
-      prisma.paymentEvent.updateMany({
+      });
+      await tx.paymentEvent.updateMany({
         where: { eventId: parsed.eventId, provider },
         data: { processedAt: new Date() },
-      }),
-    ]);
+      });
+    });
     return { ok: true, message: "Pago en proceso" };
   }
 

@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { z } from "zod";
 import { confirmMockPayment } from "@/lib/payments";
+import { setRlsContext } from "@/lib/rls";
 import { clientIp, isSameOrigin } from "@/lib/utils";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -18,6 +19,8 @@ export async function POST(request: Request) {
 
   const limit = rateLimit(`mock-pay:${clientIp(request)}`, 20, 5 * 60_000);
   if (!limit.ok) return NextResponse.json({ error: "Demasiados intentos" }, { status: 429 });
+
+  setRlsContext({ role: "SYSTEM" });
 
   const body = await request.json().catch(() => null);
   const parsed = schema.safeParse(body);

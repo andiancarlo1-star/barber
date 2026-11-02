@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { queueReminders, dispatchDueNotifications } from "@/lib/notifications";
 import { logAudit } from "@/lib/audit";
+import { setRlsContext } from "@/lib/rls";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +15,7 @@ function authorized(request: Request): boolean {
 }
 
 export async function GET(request: Request) {
+  setRlsContext({ role: "SYSTEM" });
   if (!authorized(request)) {
     return NextResponse.json({ error: "No autorizado" }, { status: 401 });
   }

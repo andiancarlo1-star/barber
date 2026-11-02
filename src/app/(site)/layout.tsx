@@ -7,9 +7,9 @@ import { SiteFooter } from "@/components/site/site-footer";
 export const dynamic = "force-dynamic";
 
 export default async function SiteLayout({ children }: { children: React.ReactNode }) {
-  const [settings, user, schedules] = await Promise.all([
+  const user = await getSessionUser();
+  const [settings, schedules] = await Promise.all([
     getSettings(),
-    getSessionUser(),
     prisma.schedule.findMany({ orderBy: { weekday: "asc" } }).catch(() => []),
   ]);
 

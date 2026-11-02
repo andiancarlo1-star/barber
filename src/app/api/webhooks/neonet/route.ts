@@ -1,22 +1,30 @@
 import { NextResponse } from "next/server";
 import { neonetProvider } from "@/lib/payments/neonet";
 import { processPaymentUpdate } from "@/lib/payments/process";
-import { logAudit } from "@/lib/audit";
-import { clientIp } from "@/lib/utils";
+import { setRlsContext } from "@/lib/rls";
+import { clientIp, readRequestText } from "@/lib/utils";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 export const runtime = "nodejs";
 
 export async function POST(request: Request) {
-  const rawBody = await request.text();
+  const ip = clientIp(request);
+  const limit = rateLimit(`neonet-webhook:${ip}`, 30, 60_000);
+  if (!limit.ok) {
+    return NextResponse.json({ error: "Demasiadas solicitudes" }, { status: 429 });
+  }
+
+  const rawBody = await readRequestText(request, 64 * 1024);
+  if (rawBody === null) {
+    return NextResponse.json({ error: "Solicitud demasiado grande" }, { status: 413 });
+  }
+
+  setRlsContext({ role: "SYSTEM" });
   const webhookRequest = { rawBody, headers: request.headers, url: request.url };
 
   if (!neonetProvider.verifyWebhook(webhookRequest)) {
-    await logAudit({
-      action: "WEBHOOK_INVALID_SIGNATURE",
-      entity: "Payment",
-      metadata: { provider: "NEONET", ip: clientIp(request) },
-    });
+    console.warn("[webhook:neonet] Firma inválida", { ip });
     return NextResponse.json({ error: "Firma inválida" }, { status: 401 });
   }
 

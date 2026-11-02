@@ -4,6 +4,7 @@ import { BookingError, createAppointment } from "@/lib/appointments";
 import { createCheckoutForAppointment, getPaymentProvider } from "@/lib/payments";
 import { getSettings } from "@/lib/settings";
 import { getSessionUser } from "@/lib/auth-helpers";
+import { setRlsContext } from "@/lib/rls";
 import { clientIp, isSameOrigin } from "@/lib/utils";
 import { rateLimit } from "@/lib/rate-limit";
 import { logAudit } from "@/lib/audit";
@@ -47,6 +48,7 @@ export async function POST(request: Request) {
   }
 
   const sessionUser = await getSessionUser();
+  setRlsContext({ role: "SYSTEM" });
 
   try {
     const result = await createAppointment({

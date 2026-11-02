@@ -16,6 +16,7 @@ import {
 } from "lucide-react";
 import { prisma } from "@/lib/prisma";
 import { getSettings } from "@/lib/settings";
+import { getSessionUser } from "@/lib/auth-helpers";
 import { formatMoneyShort, minutesToTimeLabel } from "@/lib/dates";
 import { WEEKDAYS_ES } from "@/lib/constants";
 import { whatsappLink } from "@/lib/utils";
@@ -85,6 +86,7 @@ const VALUES = [
 ];
 
 export default async function HomePage() {
+  await getSessionUser();
   const [settings, services, barbers, schedules] = await Promise.all([
     getSettings(),
     prisma.service.findMany({

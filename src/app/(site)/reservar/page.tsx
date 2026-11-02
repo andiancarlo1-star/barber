@@ -17,7 +17,8 @@ export default async function BookingPage({
   searchParams: Promise<{ service?: string; barber?: string }>;
 }) {
   const params = await searchParams;
-  const [settings, services, barbers, sessionUser] = await Promise.all([
+  const sessionUser = await getSessionUser();
+  const [settings, services, barbers] = await Promise.all([
     getSettings(),
     prisma.service.findMany({
       where: { active: true },
@@ -38,7 +39,6 @@ export default async function BookingPage({
       include: { user: true },
       orderBy: [{ displayOrder: "asc" }, { createdAt: "asc" }],
     }),
-    getSessionUser(),
   ]);
 
   let prefill = { name: "", email: "", phone: "" };

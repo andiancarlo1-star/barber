@@ -7,6 +7,7 @@ WORKDIR /app
 FROM base AS deps
 COPY package.json package-lock.json ./
 COPY prisma ./prisma
+COPY src/lib ./src/lib
 RUN npm ci
 
 FROM base AS builder

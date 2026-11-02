@@ -1,6 +1,9 @@
 import { prisma } from "@/lib/prisma";
 import { formatDateLong } from "@/lib/dates";
 import { getSettings } from "@/lib/settings";
+import { setRlsContext } from "@/lib/rls";
+import { clientIp } from "@/lib/utils";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -12,7 +15,10 @@ function escape(value: string): string {
   return value.replace(/\\/g, "\\\\").replace(/;/g, "\\;").replace(/,/g, "\\,").replace(/\n/g, "\\n");
 }
 
-export async function GET(_request: Request, { params }: { params: Promise<{ code: string }> }) {
+export async function GET(request: Request, { params }: { params: Promise<{ code: string }> }) {
+  const limit = rateLimit(`appointment-ics:${clientIp(request)}`, 30, 60_000);
+  if (!limit.ok) return new Response("Demasiadas solicitudes", { status: 429 });
+  setRlsContext({ role: "SYSTEM" });
   const { code } = await params;
   const [appointment, settings] = await Promise.all([
     prisma.appointment.findUnique({

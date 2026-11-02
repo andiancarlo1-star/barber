@@ -423,10 +423,10 @@ export async function toggleBarberAction(formData: FormData): Promise<void> {
   const barber = await prisma.barber.findUnique({ where: { id }, include: { user: true } });
   if (!barber) redirect("/admin/barberos?error=No+encontrado");
   const active = !barber.active;
-  await prisma.$transaction([
-    prisma.barber.update({ where: { id }, data: { active, acceptsBookings: active } }),
-    prisma.user.update({ where: { id: barber.userId }, data: { active } }),
-  ]);
+  await prisma.$transaction(async (tx) => {
+    await tx.barber.update({ where: { id }, data: { active, acceptsBookings: active } });
+    await tx.user.update({ where: { id: barber.userId }, data: { active } });
+  });
   await logAudit({
     userId: admin.id,
     action: active ? "BARBER_ACTIVATED" : "BARBER_DEACTIVATED",

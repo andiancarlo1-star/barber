@@ -2,6 +2,7 @@ import { redirect } from "next/navigation";
 import type { Role } from "@prisma/client";
 import { auth } from "../../auth";
 import { prisma } from "./prisma";
+import { setRlsContext, withRlsContext } from "./rls";
 
 export type SessionUser = {
   id: string;
@@ -15,16 +16,50 @@ export type SessionUser = {
 
 export async function getSessionUser(): Promise<SessionUser | null> {
   const session = await auth();
-  if (!session?.user?.id) return null;
-  return {
-    id: session.user.id,
-    name: session.user.name ?? "",
-    email: session.user.email ?? "",
-    role: session.user.role,
-    phone: session.user.phone ?? null,
-    barberId: session.user.barberId ?? null,
-    customerId: session.user.customerId ?? null,
+  if (!session?.user?.id) {
+    setRlsContext({ role: "ANON" });
+    return null;
+  }
+
+  // JWT role/profile claims can become stale after an account is disabled or
+  // its role changes. Re-read the identity from PostgreSQL before trusting it.
+  const record = await withRlsContext({ role: "SYSTEM" }, () =>
+    prisma.user.findUnique({
+      where: { id: session.user.id },
+      select: {
+        id: true,
+        name: true,
+        email: true,
+        role: true,
+        phone: true,
+        active: true,
+        barberProfile: { select: { id: true } },
+        customerProfile: { select: { id: true } },
+      },
+    }),
+  );
+
+  if (!record?.active) {
+    setRlsContext({ role: "ANON" });
+    return null;
+  }
+
+  const user: SessionUser = {
+    id: record.id,
+    name: record.name,
+    email: record.email,
+    role: record.role,
+    phone: record.phone,
+    barberId: record.barberProfile?.id ?? null,
+    customerId: record.customerProfile?.id ?? null,
   };
+  setRlsContext({
+    role: user.role,
+    userId: user.id,
+    customerId: user.customerId,
+    barberId: user.barberId,
+  });
+  return user;
 }
 
 export async function requireUser(callbackUrl = "/"): Promise<SessionUser> {

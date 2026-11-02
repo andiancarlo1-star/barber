@@ -1,27 +1,29 @@
 import { NextResponse } from "next/server";
 import { prisma } from "@/lib/prisma";
+import { setRlsContext } from "@/lib/rls";
+import { clientIp } from "@/lib/utils";
+import { rateLimit } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const limit = rateLimit(`payment-status:${clientIp(request)}`, 60, 60_000);
+  if (!limit.ok) {
+    return NextResponse.json({ error: "Demasiadas consultas" }, { status: 429 });
+  }
+
+  setRlsContext({ role: "SYSTEM" });
   const url = new URL(request.url);
   const externalId = url.searchParams.get("externalId");
-  const code = url.searchParams.get("code");
 
-  if (!externalId && !code) {
+  if (!externalId || externalId.length > 100) {
     return NextResponse.json({ error: "Falta referencia" }, { status: 400 });
   }
 
-  const payment = externalId
-    ? await prisma.payment.findUnique({
-        where: { externalId },
-        include: { appointment: { select: { code: true, status: true } } },
-      })
-    : await prisma.payment.findFirst({
-        where: { appointment: { code: code! } },
-        orderBy: { createdAt: "desc" },
-        include: { appointment: { select: { code: true, status: true } } },
-      });
+  const payment = await prisma.payment.findUnique({
+    where: { externalId },
+    include: { appointment: { select: { code: true, status: true } } },
+  });
 
   if (!payment) return NextResponse.json({ error: "Pago no encontrado" }, { status: 404 });
 

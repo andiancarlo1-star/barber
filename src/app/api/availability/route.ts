@@ -3,6 +3,7 @@ import { z } from "zod";
 import { prisma } from "@/lib/prisma";
 import { getAvailabilityRange } from "@/lib/availability";
 import { getSettings } from "@/lib/settings";
+import { setRlsContext } from "@/lib/rls";
 import { clientIp } from "@/lib/utils";
 import { rateLimit } from "@/lib/rate-limit";
 
@@ -16,6 +17,7 @@ const querySchema = z.object({
 });
 
 export async function GET(request: Request) {
+  setRlsContext({ role: "SYSTEM" });
   const ip = clientIp(request);
   const limit = rateLimit(`availability:${ip}`, 120, 60_000);
   if (!limit.ok) {

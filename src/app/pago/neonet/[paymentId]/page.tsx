@@ -2,6 +2,7 @@ import { notFound, redirect } from "next/navigation";
 import Link from "next/link";
 import { AlertTriangle } from "lucide-react";
 import { prisma } from "@/lib/prisma";
+import { setRlsContext } from "@/lib/rls";
 import { buildNeonetCheckout } from "@/lib/payments/neonet";
 import { PaymentConfigError } from "@/lib/payments/types";
 import { formatMoney } from "@/lib/dates";
@@ -16,6 +17,7 @@ export default async function NeonetPaymentPage({
   params: Promise<{ paymentId: string }>;
 }) {
   const { paymentId } = await params;
+  setRlsContext({ role: "SYSTEM" });
   const payment = await prisma.payment.findUnique({
     where: { id: paymentId },
     include: {

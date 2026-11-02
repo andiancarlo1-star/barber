@@ -3,14 +3,30 @@ import Credentials from "next-auth/providers/credentials";
 import bcrypt from "bcryptjs";
 import { z } from "zod";
 import { prisma } from "@/lib/prisma";
+import { withRlsContext } from "@/lib/rls";
 
 const credentialsSchema = z.object({
   email: z.string().email(),
   password: z.string().min(1),
 });
 
+const appUrl = process.env.NEXT_PUBLIC_APP_URL ?? process.env.NEXTAUTH_URL ?? "";
+const useSecureCookies = appUrl.startsWith("https://");
+
 export const { handlers, auth, signIn, signOut } = NextAuth({
   trustHost: true,
+  useSecureCookies,
+  cookies: {
+    sessionToken: {
+      name: `${useSecureCookies ? "__Secure-" : ""}authjs.session-token`,
+      options: {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        secure: useSecureCookies,
+      },
+    },
+  },
   session: {
     strategy: "jwt",
     maxAge: 60 * 60 * 24 * 7,
@@ -29,10 +45,12 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         const parsed = credentialsSchema.safeParse(credentials);
         if (!parsed.success) return null;
 
-        const user = await prisma.user.findUnique({
-          where: { email: parsed.data.email.toLowerCase().trim() },
-          include: { barberProfile: true, customerProfile: true },
-        });
+        const user = await withRlsContext({ role: "SYSTEM" }, () =>
+          prisma.user.findUnique({
+            where: { email: parsed.data.email.toLowerCase().trim() },
+            include: { barberProfile: true, customerProfile: true },
+          }),
+        );
         if (!user || !user.active) return null;
 
         const valid = await bcrypt.compare(parsed.data.password, user.passwordHash);

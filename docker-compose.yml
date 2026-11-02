@@ -7,16 +7,36 @@ services:
       POSTGRES_USER: ${POSTGRES_USER:-navaja}
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-navaja_dev_password}
       POSTGRES_DB: ${POSTGRES_DB:-navaja}
+      POSTGRES_APP_USER: ${POSTGRES_APP_USER:-navaja_app}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-navaja_app_dev_password}
       TZ: America/Guatemala
     ports:
-      - "5433:5432"
+      - "127.0.0.1:5433:5432"
     volumes:
       - navaja_pgdata:/var/lib/postgresql/data
+      - ./docker/init-app-role.sh:/docker-entrypoint-initdb.d/10-app-role.sh:ro
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER:-navaja} -d ${POSTGRES_DB:-navaja}"]
       interval: 5s
       timeout: 5s
       retries: 10
+
+  db-init:
+    image: postgres:16-alpine
+    restart: "no"
+    environment:
+      PGHOST: db
+      PGPASSWORD: ${POSTGRES_PASSWORD:-navaja_dev_password}
+      POSTGRES_USER: ${POSTGRES_USER:-navaja}
+      POSTGRES_DB: ${POSTGRES_DB:-navaja}
+      POSTGRES_APP_USER: ${POSTGRES_APP_USER:-navaja_app}
+      POSTGRES_APP_PASSWORD: ${POSTGRES_APP_PASSWORD:-navaja_app_dev_password}
+    volumes:
+      - ./docker/init-app-role.sh:/init-app-role.sh:ro
+    entrypoint: ["/bin/sh", "/init-app-role.sh"]
+    depends_on:
+      db:
+        condition: service_healthy
 
   migrate:
     build:
@@ -25,9 +45,12 @@ services:
     command: npx prisma migrate deploy
     environment:
       DATABASE_URL: postgresql://${POSTGRES_USER:-navaja}:${POSTGRES_PASSWORD:-navaja_dev_password}@db:5432/${POSTGRES_DB:-navaja}?schema=public
+      MIGRATE_DATABASE_URL: postgresql://${POSTGRES_USER:-navaja}:${POSTGRES_PASSWORD:-navaja_dev_password}@db:5432/${POSTGRES_DB:-navaja}?schema=public
     depends_on:
       db:
         condition: service_healthy
+      db-init:
+        condition: service_completed_successfully
     restart: "no"
 
   app:
@@ -42,14 +65,14 @@ services:
       - .env
     environment:
       NODE_ENV: production
-      DATABASE_URL: postgresql://${POSTGRES_USER:-navaja}:${POSTGRES_PASSWORD:-navaja_dev_password}@db:5432/${POSTGRES_DB:-navaja}?schema=public
+      DATABASE_URL: postgresql://${POSTGRES_APP_USER:-navaja_app}:${POSTGRES_APP_PASSWORD:-navaja_app_dev_password}@db:5432/${POSTGRES_DB:-navaja}?schema=public
       NEXTAUTH_URL: ${NEXTAUTH_URL:-http://localhost:3000}
       NEXT_PUBLIC_APP_URL: ${NEXT_PUBLIC_APP_URL:-http://localhost:3000}
       AUTH_TRUST_HOST: "true"
       HOSTNAME: 0.0.0.0
       PORT: 3000
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     depends_on:
       db:
         condition: service_healthy

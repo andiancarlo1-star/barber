@@ -7,6 +7,7 @@ import { neonetProvider } from "./neonet";
 import type { PaymentProviderAdapter, PaymentIntent } from "./types";
 import { PaymentConfigError } from "./types";
 import { processPaymentUpdate } from "./process";
+import { isMockPaymentsAllowed } from "../env";
 
 export function getPaymentProvider(provider: PaymentProvider): PaymentProviderAdapter {
   return provider === "NEONET" ? neonetProvider : mockProvider;
@@ -100,6 +101,10 @@ export async function confirmMockPayment(options: {
   paymentId: string;
   outcome: "APPROVED" | "DECLINED";
 }): Promise<{ ok: boolean; message: string; code?: string }> {
+  if (!isMockPaymentsAllowed()) {
+    return { ok: false, message: "La simulación de pagos está deshabilitada" };
+  }
+
   const settings = await getSettings();
   if (settings.paymentProvider !== "MOCK" || process.env.PAYMENT_PROVIDER === "NEONET") {
     return { ok: false, message: "La simulación de pagos está deshabilitada" };
